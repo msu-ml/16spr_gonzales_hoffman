@@ -1,3 +1,7 @@
+data/*
+matconvnet/*
+nets/*
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
