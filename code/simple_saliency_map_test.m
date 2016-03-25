@@ -26,10 +26,23 @@ end
 % load the pre-trained CNN
 net = load(net_file_path) ;
 
-%% Load the image and pass it through the CNN
+%% Load the image, pass it through the CNN, and get saliency map results
 img = imread(test_img_path) ;
 [feat_vect, layer] = get_first_fully_connected_output(net, img);
+dzdx = back_propagate_data(net, img, feat_vect, layer);
+sm = compute_class_saliency_map_dzdx(dzdx);
 
-back_prop = back_propagate_data(net, img, feat_vect, layer);
+%% Display results
 
-%% TODO: Convert back propogation result into saliency map using process talked about in the paper.
+% Resize image to be consistent and create pretty saliency map
+img_sq = imresize(img, net.meta.normalization.imageSize(1:2)) ;
+psm = get_pretty_saliency_map(sm);
+
+% Plot results
+figure;
+subplot(1,2,1);
+imshow(img_sq,[]);
+subplot(1,2,2);
+imshow(psm,[]);
+
+
