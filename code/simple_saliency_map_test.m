@@ -10,7 +10,7 @@
 %% Parameters
 net_file_path = fullfile('..','nets','imagenet-vgg-f.mat');
 net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat';
-test_img_path = fullfile('..','data','peppers.jpg');
+test_img_path = fullfile('..','data','bike.jpg');
 
 %% Setup MatConvNet and Load CNN
 
