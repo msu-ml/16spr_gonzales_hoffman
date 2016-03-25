@@ -1,6 +1,7 @@
 data/*
 matconvnet/*
 nets/*
+onlinesvm/*
 
 ## Core latex/pdflatex auxiliary files:
 *.aux

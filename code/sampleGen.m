@@ -2,7 +2,7 @@ function Main()
     clear;
     clc;
     
-    path = 'C:\Users\gonza647\Downloads\Data\Dog1\img\0001.jpg';
+    path = 'C:\Users\gonza647\CS\Courses\Project\Data\Dog1\img\0001.jpg';
 
     % setup MatConvNet
     run  ../matconvnet/matlab/vl_setupnn
@@ -13,15 +13,9 @@ function Main()
     im = bbGen(path);
 
     % load and preprocess an image
-    %im = imread(path) ;
     im_ = single(im) ; % note: 0-255 range
     im_ = imresize(im_, net.meta.normalization.imageSize(1:2)) ;
     im_ = im_ - net.meta.normalization.averageImage ;
-    
-    if (numel(size(im_)) == 2 || size(im_, 3) == 1) 
-        im_ = [im_ ; im_ ; im_];
-    end
-    size(im_)
 
     % run the CNN
     res = vl_simplenn(net, im_) ;
@@ -32,8 +26,6 @@ function Main()
     figure(1) ; clf ; imagesc(im) ;
     title(sprintf('%s (%d), score %.3f',...
     net.meta.classes.description{best}, best, bestScore)) ;
-
-
 end
 function img = bbGen(path)
     % We need some user input here to define an initial bounding box around
