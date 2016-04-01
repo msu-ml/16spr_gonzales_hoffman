@@ -2,21 +2,23 @@ function Main()
     clear;
     clc;
     
-    path = 'C:\Users\gonza647\CS\Courses\Project\Data\Dog1\img\0001.jpg';
+    path = 'C:\Users\gonza647\CS\Courses\Project\Data\MountainBike\img\0135.jpg';
 
     % setup MatConvNet
-    run  ../matconvnet/matlab/vl_setupnn
+    run  M:/16spr_cao_gonzales_hoffman/matconvnet/matlab/vl_setupnn
 
     % load the pre-trained CNN
-    net = load('imagenet-vgg-f.mat') ;
+    net = load('C:\Users\gonza647\CS\Courses\Project\code\imagenet-vgg-f.mat') ;
     
     im = bbGen(path);
-
+    
     % load and preprocess an image
     im_ = single(im) ; % note: 0-255 range
     im_ = imresize(im_, net.meta.normalization.imageSize(1:2)) ;
-    im_ = im_ - net.meta.normalization.averageImage ;
-
+    %im_ = im_ - net.meta.normalization.averageImage ;
+    figure 
+    imshow(im_ / max(max(max(im_))));
+    %{
     % run the CNN
     res = vl_simplenn(net, im_) ;
 
@@ -26,6 +28,7 @@ function Main()
     figure(1) ; clf ; imagesc(im) ;
     title(sprintf('%s (%d), score %.3f',...
     net.meta.classes.description{best}, best, bestScore)) ;
+    %}
 end
 function img = bbGen(path)
     % We need some user input here to define an initial bounding box around
@@ -56,11 +59,11 @@ function img = bbGen(path)
     samples = [0 0];
     for i = 1:120
         samples(i,:) = round(normrnd([x y], (sqrt(w*h)/2))); %Sample coords     
-        if i <= 15                                            %Draw a few of the sample boxes
+        if i <= 20                                            %Draw a few of the sample boxes
             rectangle('Position', [samples(i,1) samples(i,2) w h], 'EdgeColor','yellow');
         end
     end
-    close all;
+    %close all;
 end
 
 function vidFrames = imgCompile(directory)
