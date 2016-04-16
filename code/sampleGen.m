@@ -69,9 +69,10 @@ end
 function vidFrames = imgCompile(directory)
     loc = cd(directory);
     files = dir('*.jpg');
+    files = {files.name};
     vidFrames = [];
     for index = 1: length(files)
-        frame = imread([loc '/' files{index}]);
+        frame = imread([filesep files{index}]);
         vidFrames = cat(4, vidFrames, frame);
     end
 end
