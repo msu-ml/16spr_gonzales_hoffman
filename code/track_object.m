@@ -80,13 +80,13 @@ else
     clear bb;
 end
 
-% Show initial bounding box(es) to confirm correct placement
-for i = 1:num_initial_frames
-    figure;
-    imshow(frames(:,:,:,i),[]);
-    rectangle('Position', initial_bbs(i,:) , 'EdgeColor', 'red');
-    title(['Initial Bounding Box Placement: Frame ' num2str(i)]);
-end
+% % % % Show initial bounding box(es) to confirm correct placement
+% % % for i = 1:num_initial_frames
+% % %     figure;
+% % %     imshow(frames(:,:,:,i),[]);
+% % %     rectangle('Position', initial_bbs(i,:) , 'EdgeColor', 'red');
+% % %     title(['Initial Bounding Box Placement: Frame ' num2str(i)]);
+% % % end
 
 %% ------------------------------------------------------------------------
 %                                        Train SVM on initial video frames
@@ -113,7 +113,7 @@ for i = (num_initial_frames+1):num_frames
     frame = frames(:,:,:,i);
 
     % Generate samples from last frame's BB
-    num_samples = 120;
+    num_samples = 121; % 120 + 1 for the bb from last frame
     bbSamples = sampleBBGen(bbs(i-1,:), num_samples);
     samples = crop_img_to_bbs(frame, bbSamples);
     
@@ -138,13 +138,16 @@ for i = (num_initial_frames+1):num_frames
     %      Todo          |
     % -------------------
     target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
+    pos_samples = samples; % Will have to update this as well...
+    num_pos_samples = num_samples; % Will have to update this as well...
     
     % Backpropagate target-specific features to get class-saliency maps
-    class_saliency_maps = zeros([size(samples,1:2) 1 num_samples]);
-    for j = 1:num_samples
+    class_saliency_maps = zeros([size(samples,1) size(samples,2) num_pos_samples]);
+    for j = 1:num_pos_samples
        
-        class_saliency_maps(:,:,:,j) = compute_class_saliency_map(net, ...
-            samples(:,:,:,j), target_specific_features(j,:), layer);
+        sm = compute_class_saliency_map(net, ...
+            pos_samples(:,:,:,j), target_specific_features(j,:), layer);
+        class_saliency_maps(:,:,j) = imresize(sm, [size(samples,1), size(samples,2)]);
     end
     
     % Generate overall target-specific saliency map from class-saliency
@@ -162,6 +165,7 @@ for i = (num_initial_frames+1):num_frames
     % -------------------
     %      Todo          |
     % -------------------
+    bbs(i,:) = bbs(i-1,:); % This will need to be changed so that the bbs(i,:) is set by the info in tartget posterior
     
     % Update SVM
     % -------------------
