@@ -114,8 +114,8 @@ for i = (num_initial_frames+1):num_frames
 
     % Generate samples from last frame's BB
     num_samples = 121; % 120 + 1 for the bb from last frame
-    bbSamples = sampleBBGen(bbs(i-1,:), num_samples);
-    samples = crop_img_to_bbs(frame, bbSamples);
+    bb_samples = sampleBBGen(bbs(i-1,:), num_samples);
+    samples = crop_img_to_bbs(frame, bb_samples);
     
     % Pass samples through CNN to get sample features
     [feature_length, layer] = get_first_fully_connected_feature_length(net);
@@ -139,9 +139,10 @@ for i = (num_initial_frames+1):num_frames
     % -------------------
     target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
     pos_samples = samples; % Will have to update this as well...
+    bb_pos_samples = bb_samples; % Will have to update this as well...
     num_pos_samples = num_samples; % Will have to update this as well...
     
-    % Backpropagate target-specific features to get class-saliency maps
+    % Backpropagate target-specific features to get class saliency maps
     class_saliency_maps = zeros([size(samples,1) size(samples,2) num_pos_samples]);
     for j = 1:num_pos_samples
        
@@ -152,9 +153,8 @@ for i = (num_initial_frames+1):num_frames
     
     % Generate overall target-specific saliency map from class-saliency
     % maps
-    % -------------------
-    %      Todo          |
-    % -------------------
+    target_spec_sal_map = compute_target_specific_saliency_map(...
+        size(frame), class_saliency_maps, bb_pos_samples );
     
     % Apply/update Generative model
     % -------------------

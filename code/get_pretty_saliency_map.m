@@ -3,7 +3,7 @@ function [ psm ] = get_pretty_saliency_map( sm )
 %   Takes the grayscale saliency map and converts it into a pretty, colored
 %   saliency map.
 
-% Set parameters for the coldest and hotest hue
+% Set parameters for the coldest and hottest hue
 coldest_hue = 240.0;
 
 % Normalize image
