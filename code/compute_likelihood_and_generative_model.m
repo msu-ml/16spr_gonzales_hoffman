@@ -57,7 +57,7 @@ if (curr_frame - num_target_filters) <= 0
 end
 
 % Compute the Generative Model
-gen_model = zeros(Hbb,Wbb,'uint8');
+gen_model = zeros(Hbb,Wbb);
 sm = zeros(H, W, 1, 1);
 for k = (curr_frame - num_target_filters):(curr_frame - 1)
     
@@ -65,7 +65,7 @@ for k = (curr_frame - num_target_filters):(curr_frame - 1)
     gen_model = gen_model + ...
         squeeze(crop_img_to_bbs(sm, bbs(k,:)));
 end
-gen_model = (1 / num_target_filters) * gen_model;
+gen_model = (1.0 / double(num_target_filters)) * gen_model;
 
 
 % Compute the Likelihoods for each sample
@@ -77,7 +77,7 @@ for i = 1:Nbb
     % filter with the sample is the same as performing the dot-product on
     % their vectorized form
     sm_sample = squeeze(crop_img_to_bbs(sm, bb_samples(i,:)));
-    likelihoods(i) = dot(single(gen_model(:)),single(sm_sample(:)));
+    likelihoods(i) = dot(gen_model(:),sm_sample(:));
 end
 
 end
