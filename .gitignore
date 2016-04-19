@@ -3,6 +3,7 @@ matconvnet/*
 nets/*
 onlinesvm/*
 results/initial_saliency_map_results/*
+*.asv
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
