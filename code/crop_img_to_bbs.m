@@ -19,8 +19,13 @@ else
 end
 n = size(bbs,1);
 
+data_type = 'uint8';
+if isfloat(img(1))
+    data_type = 'double';
+end
+
 % Crop the img
-cropped_imgs = zeros(h,w,c,n, 'uint8');
+cropped_imgs = zeros(h,w,c,n, data_type);
 for i = 1:n
     
     % Get bounding box info

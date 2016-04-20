@@ -8,6 +8,7 @@
 %% ------------------------------------------------------------------------
 %                                                         Setup Parameters
 % -------------------------------------------------------------------------
+
 % Location of saved CNN/Location to save CNN
 net_file_path = fullfile('..','nets','imagenet-vgg-f.mat'); 
 
@@ -23,6 +24,9 @@ test_video_dir = fullfile('..','data',test_video,'img');
 test_video_gt = fullfile('..','data',test_video,'groundtruth_rect.txt');
 % test_video_gt = 'NA';
 
+% The file to save the final bounding boxes to
+bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
+
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
 num_initial_frames = 1;
@@ -32,6 +36,13 @@ num_initial_frames = 1;
 % frames in the video
 max_num_frames = 3; % Set to 3 just for quick tests
 % max_num_frames = intmax;
+
+% The number of sample patches to generate in each frame when looking for the
+% object
+num_samples = 121; % 120 + 1 for the bb from last frame
+
+% The number of target filters to be used in computing the generative model
+num_target_filters = 30;
 
 %% ------------------------------------------------------------------------
 %                                            Setup MatConvNet and Load CNN
@@ -69,8 +80,8 @@ initial_bbs = zeros(num_initial_frames,4);
 if strcmp(test_video_gt,'NA')
     
     % User should define initial bounding box(es)
-    for i = 1:num_initial_frames
-        initial_bbs(i,:) = bbGen(frames(:,:,:,i));
+    for t = 1:num_initial_frames
+        initial_bbs(t,:) = bbGen(frames(:,:,:,t));
     end
 else
     
@@ -97,29 +108,69 @@ end
 % -------------------
 
 %% ------------------------------------------------------------------------
-%                                                 Begin Main Tracking loop
+%                   Initialize remaining variables needed in tracking loop
 % -------------------------------------------------------------------------
 
 % Create variable to store bounding box locations, inputting initial
 % bounding box(es)
 num_frames = min(num_initial_frames + max_num_frames, size(frames,4));
-bbs = zeros(num_frames,4);
+bbs = zeros(num_frames,4); % This will hold the location of the object at each frame
 bbs(1:num_initial_frames,:) = initial_bbs;
 
+% Create variables for performing Sequential Bayesian Filtering
+bb_samples_last_frame = sampleBBGen(bbs(num_initial_frames,:), num_samples);
+posteriors_last_frame = zeros(num_samples,1);
+posteriors_last_frame(1) = 1; % Probability of object at its BB is 1, 0 elsewhere for ground truth
+target_spec_sal_maps = zeros(size(frames,1), size(frames,2),num_frames);
+
+% Initialize Target-Specific Saliency Maps for the initial frames to be 
+% used by the Sequential Bayesian Filtering process. We will
+% only use the sample with ground truth bounding box as it is most relevant
+% to creating the generative model.
+[fc_feature_length, first_fc_layer] = get_first_fully_connected_feature_length(net);
+for t = 1:num_initial_frames
+    
+    % Get current frame and the sample from ground truth bounding box
+    frame = frames(:,:,:,t);
+    sample = crop_img_to_bbs(frame, bbs(t,:));
+    
+    % Pass sample through CNN to get sample features
+    sample_features = get_first_fully_connected_output(net, sample);
+    
+    % Retrieve Target-specific features from SVM weights
+    % -------------------
+    %      Todo          |
+    % -------------------
+    target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
+    
+    % Backpropagate target-specific features to get class saliency map
+    class_saliency_maps = zeros([size(sample,1) size(sample,2) 1]);
+    sm = compute_class_saliency_map(net, ...
+        sample, target_specific_features, first_fc_layer);
+    class_saliency_maps(:,:,1) = imresize(sm, [size(sample,1), size(sample,2)]);
+    
+    % Generate overall target-specific saliency map from class-saliency
+    % maps
+    target_spec_sal_maps(:,:,t) = compute_target_specific_saliency_map(...
+        size(frame), class_saliency_maps, bbs(t,:));
+end
+
+%% ------------------------------------------------------------------------
+%                                                 Begin Main Tracking loop
+% -------------------------------------------------------------------------
+
 % Create main tracking loop, looking for object in frames
-for i = (num_initial_frames+1):num_frames
+for t = (num_initial_frames+1):num_frames
     
     % Get current frame
-    frame = frames(:,:,:,i);
+    frame = frames(:,:,:,t);
 
     % Generate samples from last frame's BB
-    num_samples = 121; % 120 + 1 for the bb from last frame
-    bb_samples = sampleBBGen(bbs(i-1,:), num_samples);
+    bb_samples = sampleBBGen(bbs(t-1,:), num_samples);
     samples = crop_img_to_bbs(frame, bb_samples);
     
     % Pass samples through CNN to get sample features
-    [feature_length, layer] = get_first_fully_connected_feature_length(net);
-    sample_features = zeros(num_samples, feature_length, 'single');
+    sample_features = zeros(num_samples, fc_feature_length, 'single');
     for j = 1:num_samples
     
         feat_vect = get_first_fully_connected_output(net, samples(:,:,:,j));
@@ -142,30 +193,48 @@ for i = (num_initial_frames+1):num_frames
     bb_pos_samples = bb_samples; % Will have to update this as well...
     num_pos_samples = num_samples; % Will have to update this as well...
     
+    if num_pos_samples == 0
+        
+        % Figure out what we wish to do in this case
+        % -------------------
+        %      Todo          |
+        % -------------------
+        bbs(t,:) = bbs(t-1,:); 
+        continue;
+    end
+    
     % Backpropagate target-specific features to get class saliency maps
     class_saliency_maps = zeros([size(samples,1) size(samples,2) num_pos_samples]);
     for j = 1:num_pos_samples
        
         sm = compute_class_saliency_map(net, ...
-            pos_samples(:,:,:,j), target_specific_features(j,:), layer);
+            pos_samples(:,:,:,j), target_specific_features(j,:), first_fc_layer);
         class_saliency_maps(:,:,j) = imresize(sm, [size(samples,1), size(samples,2)]);
     end
     
     % Generate overall target-specific saliency map from class-saliency
     % maps
-    target_spec_sal_map = compute_target_specific_saliency_map(...
+    target_spec_sal_maps(:,:,t) = compute_target_specific_saliency_map(...
         size(frame), class_saliency_maps, bb_pos_samples );
     
-    % Apply/update Generative model
-    % -------------------
-    %      Todo          |
-    % -------------------
+    % Compute the prior probabilities of each sample BB for Sequential
+    % Bayesian Filtering
+    priors = compute_prior_prob_bbs(bb_samples, bb_pos_samples, ...
+        bb_samples_last_frame, bbs(t-1,:), posteriors_last_frame );
+    
+    % Compute the likelihood probabilities of each sample BB by computing a
+    % Generative model.
+    [likelihoods, gen_model] = compute_likelihood_and_generative_model( ...
+        target_spec_sal_maps, bbs, bb_samples, num_target_filters, t);
     
     % Retrieve BB in current frame from target posterior
-    % -------------------
-    %      Todo          |
-    % -------------------
-    bbs(i,:) = bbs(i-1,:); % This will need to be changed so that the bbs(i,:) is set by the info in tartget posterior
+    posteriors = likelihoods .* priors;
+    [~,idx] = max(posteriors);
+    bbs(t,:) = bb_samples(idx,:);
+    
+    % Update Sequential Bayesian Filtering variables (posteriors and sampleBBs)
+    posteriors_last_frame = posteriors;
+    bb_samples_last_frame = bb_samples;
     
     % Update SVM
     % -------------------
@@ -179,9 +248,10 @@ end
 % -------------------------------------------------------------------------
 
 % Here, we may either return the bounding boxes to a different program,
-% that will then display them. Or we may just want to show the video here
+% that will then display them. Or we may just bbwant to show the video here
 % in this program, painting the bounding boxes on each frame.
 
 % -------------------
 %      Todo          |
 % -------------------
+save(bb_out_filename,'bbs');
