@@ -31,7 +31,10 @@ test_video_gt = fullfile('..','data',test_video,'groundtruth_rect.txt');
 % The file to save the final bounding boxes to
 bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
 
-% The directory to save outputs to (other than bounding boxes)
+% The file to save the target specific saliency maps to
+saliency_out_filename = fullfile('..','results',[test_video '-ts-sal-maps.mat']);
+
+% The directory to save outputs to (other than bounding boxes and saliency maps)
 result_out_dir = fullfile('..','results',test_video);
 
 % The number of initial video frames for which ground truth bounding boxes
@@ -270,6 +273,7 @@ if ~exist(result_out_dir,'dir')
     mkdir(result_out_dir);
 end
 save(bb_out_filename,'bbs');
+save(saliency_out_filename, 'target_spec_sal_maps');
 makeVid(result_out_dir, frames(:,:,:,1:num_frames), bbs);
 % save_annotated_vid_frames(result_out_dir, frames(:,:,:,1:num_frames), bbs);
 
