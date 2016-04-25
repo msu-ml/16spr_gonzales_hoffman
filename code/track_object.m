@@ -4,19 +4,23 @@
 % This program is meant to perform the object tracking algorithm originally
 % proposed by Hong, et al. 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+tic 
 
 %% ------------------------------------------------------------------------
 %                                                         Setup Parameters
 % -------------------------------------------------------------------------
 
-% Location of saved CNN/Location to save CNN
-net_file_path = fullfile('..','nets','imagenet-vgg-f.mat'); 
+% Directory of saved CNN/Location to save CNN
+net_file_dir = fullfile('..','nets');
+
+% Filename of saved CNN/Location to save CNN
+net_file_path = fullfile(net_file_dir,'imagenet-vgg-f.mat'); 
 
 % Location to download CNN if doesn't exist
 net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat'; 
 
 % The folder containing the frames of the video in which to perform tracking
-test_video = 'MountainBike'; % 'Basketball' 'Matrix' 'MountainBike' 'Girl'
+test_video = 'Deer'; % 'Basketball' 'Matrix' 'MountainBike' 'Girl'
 test_video_dir = fullfile('..','data',test_video,'img'); 
 
 % The file containing the ground truth bounding box labels (enter 'NA' to
@@ -27,6 +31,12 @@ test_video_gt = fullfile('..','data',test_video,'groundtruth_rect.txt');
 % The file to save the final bounding boxes to
 bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
 
+% The file to save the target specific saliency maps to
+saliency_out_filename = fullfile('..','results',[test_video '-ts-sal-maps.mat']);
+
+% The directory to save outputs to (other than bounding boxes and saliency maps)
+result_out_dir = fullfile('..','results',test_video);
+
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
 num_initial_frames = 5;
@@ -35,6 +45,7 @@ num_initial_frames = 5;
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
 max_num_frames = 10; % Set to 3 just for quick tests
+% max_num_frames = 120; % Set to 120 for  ~2hr tests
 % max_num_frames = intmax;
 
 % The number of sample patches to generate in each frame when looking for the
@@ -54,6 +65,10 @@ run(fullfile(fileparts(mfilename('fullpath')), ...
 
 % download a pre-trained CNN from the web (needed once)
 if ~exist(net_file_path,'file')
+    
+    if ~exist(net_file_dir,'dir')
+        mkdir(net_file_dir);
+    end
     urlwrite(net_download_path, net_file_path) ;
 end
 
@@ -191,6 +206,9 @@ end
 %% ------------------------------------------------------------------------
 %                                                 Begin Main Tracking loop
 % -------------------------------------------------------------------------
+init_time = toc;
+fprintf('Time to initialize algor: %f sec\n', init_time);
+tic
 
 % Create main tracking loop, looking for object in frames
 for t = (num_initial_frames+1):num_frames
@@ -284,7 +302,14 @@ end
 % that will then display them. Or we may just bbwant to show the video here
 % in this program, painting the bounding boxes on each frame.
 
-% -------------------
-%      Todo          |
-% -------------------
+if ~exist(result_out_dir,'dir')
+    mkdir(result_out_dir);
+end
 save(bb_out_filename,'bbs');
+save(saliency_out_filename, 'target_spec_sal_maps');
+makeVid(result_out_dir, frames(:,:,:,1:num_frames), bbs);
+% save_annotated_vid_frames(result_out_dir, frames(:,:,:,1:num_frames), bbs);
+
+track_time = toc;
+fprintf('Time to track: %f sec\n', track_time);
+fprintf('Total time: %f sec\n', init_time + track_time);
