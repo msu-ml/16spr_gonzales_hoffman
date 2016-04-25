@@ -29,12 +29,12 @@ bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
 
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
-num_initial_frames = 1;
+num_initial_frames = 5;
 
 % The max number of frames in a video that this algorithm should track 
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
-max_num_frames = 3; % Set to 3 just for quick tests
+max_num_frames = 10; % Set to 3 just for quick tests
 % max_num_frames = intmax;
 
 % The number of sample patches to generate in each frame when looking for the
@@ -64,9 +64,16 @@ net = load(net_file_path) ;
 %                                                       Setup and load SVM
 % -------------------------------------------------------------------------
 
-% -------------------
-%      Todo          |
-% -------------------
+% Necessary SVM variables
+global KTYPE
+global KSCALE
+global online
+global visualize
+KTYPE = 1;          %Determines the type of kernel used. 
+KSCALE = 0.25;
+online = 1;
+visualize = 0;
+C = 1;              % Soft Marging constraint in SVM train
 
 %% ------------------------------------------------------------------------
 %                                              Setup and load video frames
@@ -102,10 +109,37 @@ end
 %% ------------------------------------------------------------------------
 %                                        Train SVM on initial video frames
 % -------------------------------------------------------------------------
+[fc_feature_length, first_fc_layer] = get_first_fully_connected_feature_length(net);
+%Threshold for separating neutral/positive samples
+delta = 0.3;
+%Ground truth variable can have at most n rows, assuming every sample 
+%beyond the initial bb is negative
+groundTruth = zeros(num_samples,1);
+for t = 1:num_initial_frames
+    % Get current frame
+    frame = frames(:,:,:,t);
 
-% -------------------
-%      Todo          |
-% -------------------
+    % Generate samples from last frame's BB
+    bb_samples = sampleBBGen(bbs(t-1,:), num_samples);
+    samples = crop_img_to_bbs(frame, bb_samples);
+    
+    % Pass samples through CNN to get sample features
+    sample_features = zeros(num_samples, fc_feature_length, 'single');
+    for j = 1:num_samples    
+        feat_vect = get_first_fully_connected_output(net, samples(:,:,:,j));
+        sample_features(j,:) = feat_vect;
+    end
+    train = [train;sample_features(:,:)];
+    clear feat_vect;
+    % Train with sample_features, stripping out the neutral samples
+    % Ground Truth:
+    %       Positive Sample = sample_features(1,:);
+    %
+    %       Negative Sample = sample_features(2:end,:); which do not
+    %       overlap too much
+    
+end
+
 
 %% ------------------------------------------------------------------------
 %                   Initialize remaining variables needed in tracking loop
@@ -127,7 +161,6 @@ target_spec_sal_maps = zeros(size(frames,1), size(frames,2),num_frames);
 % used by the Sequential Bayesian Filtering process. We will
 % only use the sample with ground truth bounding box as it is most relevant
 % to creating the generative model.
-[fc_feature_length, first_fc_layer] = get_first_fully_connected_feature_length(net);
 for t = 1:num_initial_frames
     
     % Get current frame and the sample from ground truth bounding box
@@ -182,6 +215,9 @@ for t = (num_initial_frames+1):num_frames
     % -------------------
     %      Todo          |
     % -------------------
+    pos_samples = samples; % Will have to update this as well...
+    bb_pos_samples = bb_samples; % Will have to update this as well...
+    num_pos_samples = num_samples; % Will have to update this as well...
     
     % Retrieve Target-specific features from SVM weights and positive
     % samples
@@ -189,9 +225,6 @@ for t = (num_initial_frames+1):num_frames
     %      Todo          |
     % -------------------
     target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
-    pos_samples = samples; % Will have to update this as well...
-    bb_pos_samples = bb_samples; % Will have to update this as well...
-    num_pos_samples = num_samples; % Will have to update this as well...
     
     if num_pos_samples == 0
         
