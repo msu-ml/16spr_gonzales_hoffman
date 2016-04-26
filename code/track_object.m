@@ -21,6 +21,9 @@ net_file_path = fullfile(net_file_dir,'imagenet-vgg-f.mat');
 % Location to download CNN if doesn't exist
 net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat'; 
 
+% Boolean: True if priors should be used, false otherwise
+use_priors = true;
+
 % The folder containing the frames of the video in which to perform tracking
 test_video = 'Deer'; %'MountainBike' 'Basketball' 'Matrix' 'Girl' 
 test_video_dir = fullfile('..','data',test_video,'img'); 
@@ -30,14 +33,27 @@ test_video_dir = fullfile('..','data',test_video,'img');
 test_video_gt = fullfile('..','data',test_video,'groundtruth_rect.txt');
 % test_video_gt = 'NA';
 
-% The file to save the final bounding boxes to
-bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
+if use_priors
+    
+    % The file to save the final bounding boxes to
+    bb_out_filename = fullfile('..','results',[test_video '-bbs.mat']);
 
-% The file to save the target specific saliency maps to
-saliency_out_filename = fullfile('..','results',[test_video '-ts-sal-maps.mat']);
+    % The file to save the target specific saliency maps to
+    saliency_out_filename = fullfile('..','results',[test_video '-ts-sal-maps.mat']);
 
-% The directory to save outputs to (other than bounding boxes and saliency maps)
-result_out_dir = fullfile('..','results',test_video);
+    % The directory to save outputs to (other than bounding boxes and saliency maps)
+    result_out_dir = fullfile('..','results',test_video);
+else
+    
+    % The file to save the final bounding boxes to
+    bb_out_filename = fullfile('..','results',[test_video '-NoPrior-bbs.mat']);
+
+    % The file to save the target specific saliency maps to
+    saliency_out_filename = fullfile('..','results',[test_video '-NoPrior-ts-sal-maps.mat']);
+
+    % The directory to save outputs to (other than bounding boxes and saliency maps)
+    result_out_dir = fullfile('..','results',[test_video '-NoPrior']);  
+end
 
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
@@ -305,8 +321,10 @@ for t = (num_initial_frames+1):num_frames
     
     % Compute the prior probabilities of each sample BB for Sequential
     % Bayesian Filtering
-    priors = compute_prior_prob_bbs(bb_samples, bb_pos_samples, ...
-        bb_samples_last_frame, bbs(t-1,:), posteriors_last_frame );
+    if use_priors
+        priors = compute_prior_prob_bbs(bb_samples, bb_pos_samples, ...
+            bb_samples_last_frame, bbs(t-1,:), posteriors_last_frame );
+    end
     
     % Compute the likelihood probabilities of each sample BB by computing a
     % Generative model.
@@ -314,8 +332,11 @@ for t = (num_initial_frames+1):num_frames
         target_spec_sal_maps, bbs, bb_samples, num_target_filters, t);
     
     % Retrieve BB in current frame from target posterior
-    posteriors = likelihoods .* priors;
-%     posteriors = likelihoods;
+    if use_priors
+        posteriors = likelihoods .* priors;
+    else
+        posteriors = likelihoods;
+    end
     [~,idx] = max(posteriors);
     bbs(t,:) = bb_samples(idx,:);
     
