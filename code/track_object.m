@@ -9,6 +9,8 @@ tic
 %% ------------------------------------------------------------------------
 %                                                         Setup Parameters
 % -------------------------------------------------------------------------
+clear all;
+clc; 
 
 % Directory of saved CNN/Location to save CNN
 net_file_dir = fullfile('..','nets');
@@ -20,7 +22,7 @@ net_file_path = fullfile(net_file_dir,'imagenet-vgg-f.mat');
 net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat'; 
 
 % The folder containing the frames of the video in which to perform tracking
-test_video = 'Deer'; % 'Basketball' 'Matrix' 'MountainBike' 'Girl'
+test_video = 'Deer'; %'MountainBike' 'Basketball' 'Matrix' 'Girl' 
 test_video_dir = fullfile('..','data',test_video,'img'); 
 
 % The file containing the ground truth bounding box labels (enter 'NA' to
@@ -39,14 +41,16 @@ result_out_dir = fullfile('..','results',test_video);
 
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
-num_initial_frames = 1;
+num_initial_frames = 5;
 
 % The max number of frames in a video that this algorithm should track 
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
 max_num_frames = 3; % Set to 3 just for quick tests
 max_num_frames = 120; % Set to 120 for  ~2hr tests
-max_num_frames = intmax;
+% max_num_frames = 210; % Set to 210 for longer tests
+% max_num_frames = intmax;
+
 
 % The number of sample patches to generate in each frame when looking for the
 % object
@@ -79,9 +83,27 @@ net = load(net_file_path) ;
 %                                                       Setup and load SVM
 % -------------------------------------------------------------------------
 
-% -------------------
-%      Todo          |
-% -------------------
+% Necessary SVM variables
+global KTYPE
+global KSCALE
+global online
+global visualize
+global doloo
+global terse
+terse = 1;
+doloo = 0;
+KTYPE = 1;          %Determines the type of kernel used. 
+KSCALE = 0.25;
+online = 1;
+visualize = 0;
+C = 1;              % Soft Marging constraint in SVM train
+
+% How many negative samples we allow per positive sample
+samp_per_frame = 25;
+% How large we will allow our training set to become
+max_training_sz = 300;      %Corresponds to 12 frame training
+% How many frames will we skip before updating the SVM again?
+svm_step = 3;
 
 %% ------------------------------------------------------------------------
 %                                              Setup and load video frames
@@ -117,14 +139,62 @@ end
 %% ------------------------------------------------------------------------
 %                                        Train SVM on initial video frames
 % -------------------------------------------------------------------------
+[fc_feature_length, first_fc_layer] = get_first_fully_connected_feature_length(net);
+%Threshold for separating neutral/positive samples
+overlap_threshold = 0.3;
+svm_training_imgs = uint8.empty;
+svm_training_truth = [];
+%Ground truth variable can have at most n rows, assuming every sample 
+%beyond the initial bb is negative
+groundTruth = zeros(num_samples,1);
+for t = 1:num_initial_frames
+    initial_bbs(t,3:4) = initial_bbs(1,3:4);
+    % Get current frame
+    frame = frames(:,:,:,t);
+    count = 0;
+    % Generate samples from last frame's BB
+    bb_samples = sampleBBGen(initial_bbs(t,:), num_samples);
+    samples = crop_img_to_bbs(frame, bb_samples);
+    for j = 1: length(bb_samples)        
+        if count == samp_per_frame
+            break;
+        end
+        currSamp = samples(:,:,:,j);
+        overlapRatio = overlap(bb_samples(1,:), bb_samples(j,:));
+        if overlapRatio == 1 
+            count = count + 1;
+            svm_training_imgs = cat(4, svm_training_imgs, currSamp);
+            svm_training_truth = [svm_training_truth;1];
+        elseif overlapRatio <= overlap_threshold 
+            count = count + 1;
+            svm_training_imgs = cat(4, svm_training_imgs, currSamp);
+            svm_training_truth = [svm_training_truth;-1];
+        end
+    end
+end
 
-% -------------------
-%      Todo          |
-% -------------------
+% Pass samples through CNN to get sample features
+num_training = length(svm_training_truth);
+svm_training_feat = zeros(num_training, fc_feature_length, 'single');
+for j = 1:num_training    
+   feat_vect = get_first_fully_connected_output(net, svm_training_imgs(:,:,:,j));
+   svm_training_feat(j,:) = feat_vect;
+end
+addpath('../onlinesvm');
+[coeff,bias,~,inds,inde,~] = svcm_train(svm_training_feat,svm_training_truth,C);
+clear feat_vect;
+
 
 %% ------------------------------------------------------------------------
 %                   Initialize remaining variables needed in tracking loop
 % -------------------------------------------------------------------------
+weights = 0;
+% Iterate through all the support vectors
+for i = 1:length(inds)
+    samp = coeff(inds(i)) * svm_training_feat(inds(i),:) * svm_training_truth(inds(i));
+    weights = weights + samp;
+end
+weights(weights<=0) = 0;
 
 % Create variable to store bounding box locations, inputting initial
 % bounding box(es)
@@ -142,7 +212,6 @@ target_spec_sal_maps = zeros(size(frames,1), size(frames,2),num_frames);
 % used by the Sequential Bayesian Filtering process. We will
 % only use the sample with ground truth bounding box as it is most relevant
 % to creating the generative model.
-[fc_feature_length, first_fc_layer] = get_first_fully_connected_feature_length(net);
 for t = 1:num_initial_frames
     
     % Get current frame and the sample from ground truth bounding box
@@ -153,11 +222,10 @@ for t = 1:num_initial_frames
     sample_features = get_first_fully_connected_output(net, sample);
     
     % Retrieve Target-specific features from SVM weights
-    % -------------------
-    %      Todo          |
-    % -------------------
-    target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
-    
+        % Since the weights vector is sparse, many columns are removed from
+        % our sample features
+    target_specific_features = sample_features.*weights';
+
     % Backpropagate target-specific features to get class saliency map
     class_saliency_maps = zeros([size(sample,1) size(sample,2) 1]);
     sm = compute_class_saliency_map(net, ...
@@ -169,20 +237,23 @@ for t = 1:num_initial_frames
     target_spec_sal_maps(:,:,t) = compute_target_specific_saliency_map(...
         size(frame), class_saliency_maps, bbs(t,:));
 end
-
+clear target_specific_features;
 %% ------------------------------------------------------------------------
 %                                                 Begin Main Tracking loop
 % -------------------------------------------------------------------------
 init_time = toc;
 fprintf('Time to initialize algor: %f sec\n', init_time);
 tic
-
+updateSVM = 0;
 % Create main tracking loop, looking for object in frames
 for t = (num_initial_frames+1):num_frames
     
+    % Update SVM counter to tell it when to train
+    updateSVM = updateSVM + 1;
+    
     % Get current frame
     frame = frames(:,:,:,t);
-
+    
     % Generate samples from last frame's BB
     bb_samples = sampleBBGen(bbs(t-1,:), num_samples);
     samples = crop_img_to_bbs(frame, bb_samples);
@@ -196,27 +267,24 @@ for t = (num_initial_frames+1):num_frames
     end
     clear feat_vect;
     
-    % Pass sample features through SVM, retaining only positive samples
-    % -------------------
-    %      Todo          |
-    % -------------------
+    % Pass sample features through SVM, retaining only positive samples 
+    ytest = ones(num_samples,1);
+    [ypred,~] = svcm_test(sample_features, ytest, svm_training_feat, svm_training_truth, coeff, bias);
     
+    pos_samples = samples(:,:,:,ypred>0); 
+    bb_pos_samples = bb_samples(ypred>0,:); 
+    num_pos_samples = sum(ypred>0);
+    pos_ind = find(ypred>0);
     % Retrieve Target-specific features from SVM weights and positive
     % samples
-    % -------------------
-    %      Todo          |
-    % -------------------
-    target_specific_features = sample_features; % Obviously, we need to update this. This is just filler code for now so we can have features to test saliency maps with
-    pos_samples = samples; % Will have to update this as well...
-    bb_pos_samples = bb_samples; % Will have to update this as well...
-    num_pos_samples = num_samples; % Will have to update this as well...
-    
+    for i = 1:num_pos_samples
+        target_specific_features(i,:) = sample_features(pos_ind(i),:).*weights;
+    end
     if num_pos_samples == 0
-        
-        % Figure out what we wish to do in this case
-        % -------------------
-        %      Todo          |
-        % -------------------
+        fprintf('No positive samples were found for frame %d\n',t);
+        % Decrementing updateSVM here will ensure the SVM training set does
+        % not attempt to train on the frame with no positives
+        updateSVM = updateSVM - 1; 
         bbs(t,:) = bbs(t-1,:); 
         continue;
     end
@@ -253,13 +321,57 @@ for t = (num_initial_frames+1):num_frames
     
     % Update Sequential Bayesian Filtering variables (posteriors and sampleBBs)
     posteriors_last_frame = posteriors;
-    bb_samples_last_frame = bb_samples;
+    bb_samples_last_frame = bb_samples;   
     
-    % Update SVM
-    % -------------------
-    %      Todo          |
-    % -------------------
-    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % Update SVM every third frame
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~(mod(updateSVM,svm_step))
+        %Print statement for debugging purposes
+        %fprintf('Update SVM at frame %d, update #%d\n',t,floor(t/svm_step));
+        count = 0;
+        for j = 1:num_samples
+            if count == samp_per_frame
+                break;
+            end
+            currSamp = samples(:,:,:,j);
+            overlapRatio = overlap(bbs(t,:), bb_samples(j,:));
+            if overlapRatio == 1
+                count = count + 1;
+                svm_training_imgs = cat(4, svm_training_imgs, currSamp);
+                svm_training_truth = [svm_training_truth;1];
+            elseif overlapRatio <= overlap_threshold
+                count = count + 1;
+                svm_training_imgs = cat(4, svm_training_imgs, currSamp);
+                svm_training_truth = [svm_training_truth;-1];
+            end
+        end
+        % We want to keep 300 total samples in our training, if more
+        % are accumulated then we'd like to remove old samples
+        if length(svm_training_truth) > max_training_sz
+            svm_training_truth = svm_training_truth((samp_per_frame+1):end);
+            svm_training_imgs = svm_training_imgs(:,:,:,(samp_per_frame+1):end);
+        end
+        
+        %Retrain the SVM
+        num_training = length(svm_training_truth);
+        svm_training_feat = zeros(num_training, fc_feature_length, 'single');
+        for j = 1:num_training
+            feat_vect = get_first_fully_connected_output(net, svm_training_imgs(:,:,:,j));
+            svm_training_feat(j,:) = feat_vect;
+        end
+        [coeff,bias,~,inds,inde,~] = svcm_train(svm_training_feat,svm_training_truth,C);
+        clear feat_vect;
+        
+        % Update the weights
+        weights = 0;
+        % Iterate through all the support vectors
+        for i = 1:length(inds)
+            samp = coeff(inds(i)) * svm_training_feat(inds(i),:) * svm_training_truth(inds(i));
+            weights = weights + samp;
+        end
+        weights(weights<=0) = 0;
+    end 
 end
     
 %% ------------------------------------------------------------------------
