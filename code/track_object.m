@@ -45,8 +45,8 @@ num_initial_frames = 1;
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
 max_num_frames = 3; % Set to 3 just for quick tests
-% max_num_frames = 120; % Set to 120 for  ~2hr tests
-% max_num_frames = intmax;
+max_num_frames = 120; % Set to 120 for  ~2hr tests
+max_num_frames = intmax;
 
 % The number of sample patches to generate in each frame when looking for the
 % object
@@ -247,6 +247,7 @@ for t = (num_initial_frames+1):num_frames
     
     % Retrieve BB in current frame from target posterior
     posteriors = likelihoods .* priors;
+%     posteriors = likelihoods;
     [~,idx] = max(posteriors);
     bbs(t,:) = bb_samples(idx,:);
     
@@ -275,7 +276,7 @@ end
 save(bb_out_filename,'bbs');
 save(saliency_out_filename, 'target_spec_sal_maps');
 makeVid(result_out_dir, frames(:,:,:,1:num_frames), bbs);
-% save_annotated_vid_frames(result_out_dir, frames(:,:,:,1:num_frames), bbs);
+save_annotated_vid_frames(result_out_dir, frames(:,:,:,1:num_frames), bbs);
 
 track_time = toc;
 fprintf('Time to track: %f sec\n', track_time);
