@@ -9,7 +9,6 @@
 \usepackage{subfig}
 \usepackage[table,xcdraw]{xcolor}
 
-
 \newcommand{\todo}{{\\ \huge \color{red} Still need to do this!!!}} % Inserts Todos Statement
 
 \DeclareMathOperator*{\argmin}{argmin} % Argmin
@@ -68,9 +67,9 @@ We are basing our project on the work of Hong, et al. \cite{hong2015online}, and
 Hong, et al. propose a novel online tracking scheme for use in applications where tracking an object through frames of a video is desired.
 Although there are a large range of potential applications for object tracking software, it is still a difficult problem due to challenges of occlusion, pose variations, illumination changes, fast motion, and background clutter \cite{hong2015online}, and any potential tracking solution must have robust methods to overcome these challenges.
 This paper proposes to solve these problems using the combined utility of both a convolutional neural network (CNN) and support vector machine (SVM), wherein a discriminative saliency map is produced and used to calculate the posterior probability of the location of the target in the image.
-The object tracking algortihgm by Hong, et al. is described below and is portrayed in Figure \ref{fig:algor}.
+The object tracking algortihgm by Hong, et al. is described below and is portrayed in Figure~\ref{fig:algor}.
 
-The tracking algorithm proposed by \cite{hong2015online} begins by first generating a set of sample images, each of which is drawn from candidate bounding boxes near where the target was located in the previous frame.
+The tracking algorithm proposed by~\cite{hong2015online} begins by first generating a set of sample images, each of which is drawn from candidate bounding boxes near where the target was located in the previous frame.
 Each of these sample images is passed through a pre-trained CNN~\cite{jia2014caffe}.
 A CNN is used because CNNs have been shown to be very successful at creating image representations useful for object discrimination.
 Additionally, CNNs have shown promise in overcoming challenges from many of the current difficulties presented in object tracking, including pose variations, illumination changes, and background clutter.
@@ -303,6 +302,19 @@ This is discussed further when discussing the results below.
 \todo
 
 \section{Results}
+We ran our algorithm on many different videos from the Tracker Benchmark v1.0 dataset~\cite{wu2013online} and analyzed the resulting videos qualitatively.
+Some of these results can be found on our GitHub page here: \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results!.
+In the following sections, we present and analyze some of these results.
+
+\subsection*{How the Prior and the SVM Affect the Tracking}
+-
+\todo
+
+\subsection*{How Object Scale Affects the Tracking}
+-
+\todo
+
+\subsection*{Modifying the SVM Training to Improve Tracking}
 -
 \todo
 
