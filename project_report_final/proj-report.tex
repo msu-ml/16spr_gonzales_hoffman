@@ -12,6 +12,9 @@
 
 \newcommand{\todo}{{\\ \huge \color{red} Still need to do this!!!}} % Inserts Todos Statement
 
+\DeclareMathOperator*{\argmin}{argmin} % Argmin
+\DeclareMathOperator*{\argmax}{argmax} % Argmax
+
 \begin{document}
 
 % Copyright
@@ -225,11 +228,77 @@ Furthermore, because the target-specific features are only produced for the samp
 Removing the features corresponding to non-positive weights further helps to ensure this.
 Thus the saliency maps can be used to provide a pixel-wise segmentation of the target object in the frame, as can be seen in Figure~\ref{fig:saliency} and Figure~\ref{fig:target-saliency}.
 
-\subsection{Computing the Generative Model}
--
-\todo
+\subsection{Localizing the Target with Target-Specific Saliency Map}
+Given the target-specific saliency map, we wish to locate the target in the video frame.
+Hong, et al accomplish this in their algorithm through a process they refer to as \textit{sequential Bayesian filtering}~\cite{hong2015online}.
+Let $M_t$ represent the target-specific saliency map at the current frame, frame $t$, and allow $x_t$ to represent one of the candidate sample patches from this frame.
+Sequential Bayesian filtering then attempts to compute the \textit{posterior probability} $p(x_t|M_{1:t})$ of each candidate $x_t$ containing the target, given by
+\begin{equation}
+\label{eq:posterior}
+p(x_t|M_{1:t}) \propto p(M_t |x_t)p(x_t|M_{1:t-1})
+\end{equation}
+where $p(M_t |x_t)$ represents the likelihood of the sample and $p(x_t|M_{1:t-1})$ represents the prior of the sample.
+The candidate sample patch with the highest posterior is then selected as the bounding box that contains the target in the current frame $x_t^*$.
+The algorithm will then continue by moving to the next frame, repeating the algorithm until all frames have been analyzed.
 
-\subsection{Computing the Target Posterior}
+\subsubsection{Computing the Likelihood with the Generative Model}
+In order to determine the likelihood of a candidate sample, a generative model $H_t$ is first computed.
+This generative model is computed using the target-specific saliency maps of the $m$ preceding frames where $m$ is a constant, scalar value, set to $m = 30$ in~\cite{hong2015online}.
+Let $x_k^*$ indicate the bounding box of the located target in frame $k$ and $M_k(x^*_k)$ denote the target-specific saliency map at frame $k$ cropped to the bounding box $x^*_k$.
+Hence, $M_k(x^*_k)$ shows how the target appeared in the saliency map at frame $k$.
+The generative model is then computed by simply finding the average appearance of the target in the last $m$ frames:
+\begin{equation}
+H_t = \frac{1}{m} \sum_{k=t-m}^{t-1} M_k(x^*_k)
+\end{equation}
+The likelihood of a candidate patch $x_t$ is then found by convolving the generative model $H_t$ with the current saliency map cropped to the candidate patch $M_t(x_t)$, as follows:
+\begin{equation}
+p(M_t|x_t) \propto H_t \otimes M_t(x_t)
+\end{equation}
+where $\otimes$ represents the convolution operator.
+The likelihood of each candidate sample patch is then found in this way, using the same generative model for all patches.
+
+\subsubsection{Computing the Prior}
+To find the prior $p(x_t|M_{1:t-1})$ of a candidate patch $x_t$, both the location of this bounding box and the posterior distribution from the previous frame is considered.
+The prior is computed through the following formula:
+\begin{equation}
+\label{eq:prior}
+p(x_t|M_{1:t-1}) = \int p(x_t|x_{t-1}) p(x_{t-1}|M_{1:t-1}) dx_{t-1}
+\end{equation}
+This equation shows that a candidate's prior is the sum over all the candidates from the previous frame $x_{t-1}$ of a location-based probability $p(x_t|x_{t-1})$ weighted by the previous frame's candidates' posterior probabilities $p(x_t|M_{1:t-1})$.
+The posterior probabilities were already calculated during the last iteration of the algorithm; the location-based probability, however, needs to be calculated.
+To do this, the mean $\mu_t$ and covariance $\Sigma_t$ of the locations of the positive samples from the current frame are calculated.
+Then, the amount $d_t$ that the target object has moved between frames $t-1$ and $t$ is estimated using the following formula:
+\begin{equation}
+d_t = \mu_t - x^*_{t-1}
+\end{equation}
+where $x^*_{t-1}$ is the estimated location of the target object in the previous frame.
+It is then assumed that the the probability of the target object moving to a location is normally distributed around a mean of the distance vector $d_t$ with covariance $\Sigma_t$.
+Thus the location-based probability of a candidate sample in relation to a candidate sample from the previous frame is found by:
+\begin{equation}
+p(x_t|x_{t-1}) = \mathcal{N}(x_t-x_{t-1}; d_t ; \Sigma_t)
+\end{equation}
+Plugging this into Equation~\ref{eq:prior} allows the prior for each candidate sample in the current frame to be computed.
+
+\subsubsection{Computing the Target Posterior}
+After computing the likelihoods and priors, the target posterior $p(x_t|M_{1:t})$ for a candidate sample patch can then be computed by using Equation~\ref{eq:posterior}.
+The location of the target in the current frame $x_t^*$ is then set as the candidate patch with the highest posterior according to the following equation:
+\begin{equation}
+x_t^* = \argmax_{x_t} p(x_t|M_{1:t})
+\end{equation}
+Having found the target in the current frame, the algorithm then has the option to update the training of the SVM, as detailed Section~\ref{sec:training-svm}.
+After this, the algorithm begins its next iteration by searching for the object in the next frame, $t+1$, starting by generating new candidate sample patches around $x_t^*$.
+
+Note that in practice, we found that if the target object moved too much between a pair of frames, the prior probability, which gives preference to bounding boxes that have not moved very much, would prevent the algorithm from selecting candidate sample containing the target object.
+Therefore, we found that the algorithm produces more accurate and smooth results when the prior is not used to calculate the posterior, using a modified posterior $p(x_t|M_{1:t})'$ such that
+\begin{equation}
+\label{eq:posterior-mod}
+p(x_t|M_{1:t})' \propto p(M_t |x_t)
+\end{equation}
+Because of this, the majority of our reported results do not use the prior to calculate the posterior.
+This is discussed further when discussing the results below.
+
+\subsection{Training the SVM}
+\label{sec:training-svm} % Keep this label in the section describing the SVM
 -
 \todo
 
