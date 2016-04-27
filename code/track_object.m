@@ -22,10 +22,10 @@ net_file_path = fullfile(net_file_dir,'imagenet-vgg-f.mat');
 net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat'; 
 
 % Boolean: True if priors should be used, false otherwise
-use_priors = true;
+use_priors = false;
 
 % The folder containing the frames of the video in which to perform tracking
-test_video = 'Deer'; %'MountainBike' 'Basketball' 'Matrix' 'Girl' 
+test_video = 'MountainBike'; % 'Basketball' 'Matrix' 'Girl' 'Deer'
 test_video_dir = fullfile('..','data',test_video,'img'); 
 
 % The file containing the ground truth bounding box labels (enter 'NA' to
@@ -57,15 +57,15 @@ end
 
 % The number of initial video frames for which ground truth bounding boxes
 % should be provided.
-num_initial_frames = 5;
+num_initial_frames = 10;
 
 % The max number of frames in a video that this algorithm should track 
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
 max_num_frames = 3; % Set to 3 just for quick tests
-max_num_frames = 120; % Set to 120 for  ~2hr tests
+%max_num_frames = 190; % Set to 120 for  ~2hr tests
 % max_num_frames = 210; % Set to 210 for longer tests
-% max_num_frames = intmax;
+max_num_frames = intmax;
 
 
 % The number of sample patches to generate in each frame when looking for the
@@ -261,6 +261,8 @@ init_time = toc;
 fprintf('Time to initialize algor: %f sec\n', init_time);
 tic
 updateSVM = 0;
+num_true_positive = num_initial_frames*2;
+posIdx = 1;
 % Create main tracking loop, looking for object in frames
 for t = (num_initial_frames+1):num_frames
     
@@ -349,8 +351,8 @@ for t = (num_initial_frames+1):num_frames
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     if ~(mod(updateSVM,svm_step))
         %Print statement for debugging purposes
-        %fprintf('Update SVM at frame %d, update #%d\n',t,floor(t/svm_step));
-        count = 0;
+        fprintf('Update SVM at frame %d, update #%d\n',t,floor(t/svm_step));
+        count = 0;        
         for j = 1:num_samples
             if count == samp_per_frame
                 break;
@@ -367,11 +369,21 @@ for t = (num_initial_frames+1):num_frames
                 svm_training_truth = [svm_training_truth;-1];
             end
         end
-        % We want to keep 300 total samples in our training, if more
-        % are accumulated then we'd like to remove old samples
+        % In training we'd like to keep the initial ground truth Positive
+        % samples, and replace old negative samples to prevent our training
+        % set from growing too large
         if length(svm_training_truth) > max_training_sz
-            svm_training_truth = svm_training_truth((samp_per_frame+1):end);
-            svm_training_imgs = svm_training_imgs(:,:,:,(samp_per_frame+1):end);
+            for j = 1:samp_per_frame
+                if (svm_training_truth(j)>0) && (posIdx < num_true_positive)
+                    %Keep track of the old positive samples we keep, we
+                    %only want to keep a certain amount
+                    posIdx = j;
+                end
+            end
+            svm_training_truth = [svm_training_truth(1:posIdx);svm_training_truth((posIdx+samp_per_frame):end)];
+            new_training_imgs = svm_training_imgs(:,:,:,1:posIdx);
+            new_training_imgs = cat(4,new_training_imgs,svm_training_imgs(:,:,:,(posIdx+samp_per_frame):end));
+            svm_training_imgs = new_training_imgs;
         end
         
         %Retrain the SVM
