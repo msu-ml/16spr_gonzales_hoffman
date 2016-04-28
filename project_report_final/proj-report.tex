@@ -383,15 +383,22 @@ We also performed additional tests that showed that using the SVM \textit{with} 
 After all of these tests, we determined that our tracking algorithm performed best when we used the SVM but did not use the prior.
 Therefore, the rest of the results shown here use this configuration.
 
+\subsection{Modifying the SVM Training to Improve Tracking}
+-
+\todo
+
 \subsection{How Object Scale Affects the Tracking}
 When testing our algorithm, we noticed that the algorithm has trouble tracking an object when the size, or scale, of the object changes between frames.
 This often happens when the target object comes closer to or goes farther away from the camera.
 Some examples of our algorithm failing from what we believe are scaling issues are shown in Figure~\ref{fig:scaling1} and Figure~\ref{fig:scaling2}.
-The complete video sequences can be found on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results/Scale-Variation-Results!.
+The complete video sequences can be found on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results/! 
+
+\noindent{\verb!Scale-Variation-Results!.}
 Unfortunately, the scaling issue is a problem inherent in the algorithm design by Hong, et al.
 This is because the algorithm assumes that the target object's bounding box stays constant for all the frames.
 While the algorithm could be modified to check for growing or shrinking bounding boxes, time constraints prevented us from adding this to our code.
 This is one task we wish to work on in the future.
+As it turns out, many of the tracking errors we have had so far can be attributed to variations in scale.
 
 \begin{figure}[h]
 \begin{tabular}{c}
@@ -415,29 +422,61 @@ This is one task we wish to work on in the future.
 \label{fig:scaling2}
 \end{figure}
 
-
-\subsection{Modifying the SVM Training to Improve Tracking}
--
-\todo
-
 \subsection{Miscellaneous Results}
--
-\todo
+Other than those tests already mentioned, we tested our algorithm on several other videos from the testing dataset. 
+Some of these results are shown in the figures below and can also be seen on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results!.
+
+\noindent{Note} that several figures appear \textit{after} the references section of the report.
+Overall, we feel that our algorithm was able to perform well on video sequences that did not involve too much scale variation.
+We believe that many of the primary problems the algorithm currently faces can be fixed through the future work we plan to implement.
 
 \section{Conclusions and Future Work}
--
-\todo
+We were able to re-implement the results of Hong, et al.~\cite{hong2015online} in order to produce an object tracking algorithm for videos that worked surprisingly well overall.
+This algorithm contributed to the field of object tracking in several ways.
+The use of a CNN to extract features on the target object allowed us to overcome many of the traditional problems in object tracking, such as some lighting variations and object rotation.
+The use of an online SVM on top of the CNN then allowed the algorithm to learn the representation of a specific object at runtime, improving tracking performance. 
+We did run into some problems, such as the prior causing the tracker to lose fast moving objects and scale variations causing the tracker to lose objects moving too much towards or away from the camera.
+However, we were able to circumvent some of these problems (e.g. removing the prior) and came up with plans for future work to solve some of the other problems (e.g. dealing with scale variations).
+While our algorithm did not perform as well qualitatively as the results provided by Hong, et al., we recognize that the authors of that paper may have not included in their paper all of the optimizations they used for their algorithm, and they likely had a larger amount of time to fine tune the algorithm to the Tracking Benchmark v1.0 dataset.
+They were also able to use the pre-trained \textit{R-CNN} in their algorithm, which is available in Caffe but not MatConvNet, and this may have caused significant differences in our results.
 
+We learned many important aspects of object tracking while working on this project.
+First off, we learned how to use a pre-trained CNN to create target-specific saliency maps in order to localize a target.
+We found this a very interesting, ingenious way to use a CNN in object tracking.
+This project also gave us experience implementing the results of someone else's paper and learning to interpret/discover the many parts of an algorithm that are not made clear in a paper.
+During this project, we also had a hands-on experience dealing with many of the challenges involved in video tracking, such as scale variation, occlusions, deformations, fast motion, and object rotation.
+If not accounted for, these challenges can absolutely devastate a tracking algorithm in only a few frames.
+While this algorithm was able to handle many of these challenges, it could not handle all of them which led us to think deeper into how these challenges can be overcome.
+
+In the future, we are hoping to continue modifying this algorithm and improving it to work in more situations.
+One of the most obvious problems inherent in the algorithm that needs to be addressed is that of scale variation.
+This algorithm currently assumes that the bounding box around an object can stay the same size throughout all the video frames.
+However, this assumption proves to be false in far too many circumstances.
+Therefore, we plan to modify our algorithm so that when we generate candidate sample patches, we will generate some that are smaller and some that are larger than the current bounding box size.
+This would allow the bounding box to grow or shrink as needed.
+We also noticed that if the algorithm does a poor job at classifying the target for several frames in a row, our current SVM training algorithm will begin training on these mistakes, leading to more mistakes in the future.
+Occasionally, this causes no positive samples to be found in a frame. Currently, in this situation, we just set the bounding box to be the same as that in the previous frame and then continue to the next frame.
+In the future, we plan to modify the SVM in a few ways to help account for this.
+First, if no positive samples are found, we plan to then back-propagate most or all of the samples through the CNN, with the hope that the target object, although not found by the SVM, will be found in some of these samples and will be found by the target posterior.
+Then we could retrain the SVM including this new target location.
+Also, we plan to decrease the amount of allowed overlap between the positive sample fed to the SVM and the negative samples fed to the SVM so that there is less likelihood it will be told that a sample including large parts of the target is a negative sample during training.
+Thirdly, we also wish to modify the SVM so that it is a truly incremental, online SVM; currently, we have to retrain the SVM on \textit{all} the training data every time we wish to train it.
+Because of this, we had to significantly decrease the amount of training samples we feed the SVM to decrease the amount of time it takes to train.
+If we could implement an incremental, online SVM, then each time we train it we would only feed it the \textit{new} training samples, i.e. those from the previous frame.
+This would allow it to train on a much larger set of training samples and become much more accurate, we hope.
+Other than these updates, we have some other future work planned as well.
+For instance, we may turn our main program file into a function to make it easier to call, may add an option to track multiple objects, and may investigate tracking objects in spectra other than the visible light spectrum, such as in thermal videos.
 
 \section{Work Distribution among Authors}
 This section outlines how the work was distributed between the two authors of this report. 
 
 \subsection{Aaron Gonzales}
 \textit{Aaron Gonzales} was primarily responsible for generating the candidate sample patches, for using an SVM to find the target-specific features from the sample features, and training the online SVM.
-He also researched the related work and was the primary contributor towards creating the Final Project presentation.
+He also researched the related work and was the primary contributor towards creating the final project presentation.
 
 \subsection{Steven Hoffman}
 \textit{Steven Hoffman} was primarily responsible for writing the skeleton code for the overall tracking algorithm, passing samples through the CNN to get the sample features, back-propagating the target-specific features through the CNN to create a target-specific saliency map, computing the generative model, and finding the target posterior.
+He also was the primary contributor towards creating the final project report.
 
 \subsection{Both Authors}
 \textit{Both authors} worked together to write up the various project reports, to give the final presentation, and to run the code on various testing sequences (i.e. videos).
