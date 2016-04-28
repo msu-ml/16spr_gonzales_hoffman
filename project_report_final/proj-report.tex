@@ -179,8 +179,14 @@ Thus, to circumvent the large amount of time needed to install Caffe, we decided
 MatConvNet provides several pre-trained CNNs, and we decided to use \textit{VGG-F}, a CNN that has achieved state-of-the-art performance on the ImageNet object recognition database~\cite{chatfield2014return}.
 
 \subsection{Using an SVM to Find Target-Specific Features from Sample Features}
-Online SVM code has been acquired from Cauwenberghs, et al.~\cite{cauwenberghs2001incremental}. 
-\todo
+Online SVM code has been acquired from Cauwenberghs, et al.~\cite{cauwenberghs2001incremental}. For this step of our procedure we utilize those sample features from the output of the CNN's first fully-connected layer and use them as feature inputs for our online SVM. Those samples which are positively classified (those representing the object of interest) will be used to generate target-specific features, all negative samples are discarded. Rather than use all of the features in each positive sample to generate a saliency map, we want to focus on those features which helped best discriminate our target against the background. We obtain the target-specific features as\newline
+\[\phi_k^+(x_i) = 
+\begin{cases}
+w_k\phi_k(x_i),& \text{if } w_k > 0\\
+0, 			   & \text{otherwise}
+\end{cases}
+\]  \newline
+where $\phi_k(x_i)$ denotes a the k-th entry of our positive samples $\phi(x_i)$, and $w_k$ denotes the k-th entry of our weight vector. In this way, we are able to stress those pixels which offer the best discriminatory information of our target and disregard the rest. 
 
 \subsection{Computing Target-Specific Saliency Maps}
 Once the target-specific features are found for the positive samples, a class-specific saliency map needs to be generated for each of these samples, using the process detailed in~\cite{simonyan2013deep}.

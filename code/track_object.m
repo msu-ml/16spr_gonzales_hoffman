@@ -25,13 +25,13 @@ net_download_path = 'http://www.vlfeat.org/matconvnet/models/imagenet-vgg-f.mat'
 use_priors = false;
 
 % The folder containing the frames of the video in which to perform tracking
-test_video = 'MountainBike'; % 'Basketball' 'Matrix' 'Girl' 'Deer'
+test_video = 'Skiing'; % 'Basketball' 'Matrix' 'Girl' 'Deer'
 test_video_dir = fullfile('..','data',test_video,'img'); 
 
 % The file containing the ground truth bounding box labels (enter 'NA' to
 % use User defined bounding boxes)
 test_video_gt = fullfile('..','data',test_video,'groundtruth_rect.txt');
-% test_video_gt = 'NA';
+test_video_gt = 'NA';
 
 if use_priors
     
@@ -63,7 +63,7 @@ num_initial_frames = 10;
 % the object, after the initial frames. Set to intmax to consider all the 
 % frames in the video
 max_num_frames = 3; % Set to 3 just for quick tests
-%max_num_frames = 190; % Set to 120 for  ~2hr tests
+max_num_frames = 50; % Set to 120 for  ~2hr tests
 % max_num_frames = 210; % Set to 210 for longer tests
 max_num_frames = intmax;
 
