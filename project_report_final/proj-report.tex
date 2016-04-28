@@ -8,6 +8,8 @@
 \usepackage{float}
 \usepackage{subfig}
 \usepackage[table,xcdraw]{xcolor}
+\usepackage{amsmath}
+\usepackage{flexisym}
 
 \newcommand{\todo}{{\\ \huge \color{red} Still need to do this!!!}} % Inserts Todos Statement
 
@@ -305,9 +307,21 @@ This is discussed further when discussing the results below.
 
 \subsection{Training the SVM}
 \label{sec:training-svm} % Keep this label in the section describing the SVM
--
-\todo
+In our implementation we update the online SVM every third frame past the initial frames. Our intuition behind this lay in the fact that the representation our target changing dramatically in two frames is highly unlikely give the FPS rate of most modern recording devices. This also helps reduce the computational overhead associated with training new samples at every frame, improving the overall speed of our program. As an additional step in helping reduce the computational demands, we have a strict limit in the number of samples in our training set. While time did not permit for much parameter tuning, a base of 300 samples. Each frame used for training is limited to 25 overall samples (1 positive, 24 negative), the labels of which are calculated as follows\newline
 
+\begin{equation}
+	y_i =
+	\begin{cases}
+		+1, & \text{if } x_i^\textprime = x^*t\\
+		-1, & \text{if } \frac{\text{BB}(x_t^*)\cap \text{BB}(x_i\textprime)}{\text{BB}(x^*_t)\cup \text{BB}(x_t\textprime)} < \delta\\
+	\end{cases}
+\end{equation}
+
+where BB(x) denotes the bounding box of a given state x, and $\delta$ represents an overlap threshold (in our case 0.3). Concretely, the negative examples we use in our training set are obtained by choosing those samples which have less than a $30\%$ overlap with the sample that offered the best posterior probability. We implement a FIFO-like replacement policy on our SVM training set, such that when our set threatens to become larger than the 300 samples we simply replace with oldest set of 25 samples with the most recent. Doing this allows our SVM to train on samples that discriminate between the target and very recent background information - this is helpful in sequences that have rapidly changing backgrounds. After updating the SVM we need to recalculate the weights. We can do this by calculating the following\newline
+\begin{equation}
+	w = \sum_{i\in E}a_iy_i\phi(x_i)
+\end{equation}
+Training the SVM returns $a_i$ which are Lagrange multipliers, and $E$ which are the support vectors lying on or inside the margin. This updated weight vector is used for the target-specific feature generation discussed in section 4.3.
 \section{Results}
 We ran our algorithm on many different videos from the Tracker Benchmark v1.0 dataset~\cite{wu2013online} and analyzed the resulting videos qualitatively.
 Some of these results can be found on our GitHub page here: \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results!.
@@ -319,7 +333,7 @@ This section presents and discusses some of these results.
 The video sequences referred to in this section can be viewed at the following location on our GitHub page: \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results/Affects-of-Prior-and-SVM-Results!.
 
 The first test we decided to perform was to compare using the prior and not using the prior.
-We first tested this without the SVM because we had not yet implemented the SVM.
+As the SVM had not been fully integrated into our algorithm at this point these tests contained no help from an online SVM. 
 The reason we decided to test the affect of the prior is because we noticed that for some video sequences, the target object would move a relatively large distance in between frames, i.e. the object was moving fast, and our tracking algorithm was not following the object when this happened.
 For example, a few frames from the \textit{Deer} video sequence where this fast object movement occurs are shown in Figure~\ref{fig:deer-p-ns}.
 
@@ -390,8 +404,7 @@ After all of these tests, we determined that our tracking algorithm performed be
 Therefore, the rest of the results shown here use this configuration.
 
 \subsection{Modifying the SVM Training to Improve Tracking}
--
-\todo
+Since we implemented a FIFO replacement policy on our SVM training set, we found that some problems occurred. For example, a sample which offered the max posterior probability for a given frame was not guaranteed to contain our object. In the cases where this happened, our SVM would begin adding those samples as positive samples in training. Additionally, it was entirely possible that some of the 'negative' examples which had less than a $30\%$ overlap with this false positive actually contained more of our target than the positive sample! In these cases our SVM began learning that the original background was our tracking object, while our original tracking object became considered background material. Since our oldest samples of the target object had long since been replaced in our training set, there were instances when our SVM training set was full of positive samples that contained none of our original target. To solve this we decided it would be prudent to permanently keep all the positive samples from the initial training frames, as well as the same number of positive samples in the next frames. For example, if we decided to initialize our SVM on ten frames which were guaranteed to contain our target, we would also assume that our algorithm would provide accurate bounding boxes in the subsequent ten frames. These 20 positive samples (one from each frame) would be permanently kept in our training set, as they were samples with a very high confidence of containing our target. After implementing this change we found a noticeable improvement in tracking. Sequences in which the bounding box would lose the initial target before were now much more likely to stay consistently on target throughout.   
 
 \subsection{How Object Scale Affects the Tracking}
 When testing our algorithm, we noticed that the algorithm has trouble tracking an object when the size, or scale, of the object changes between frames.
@@ -469,7 +482,7 @@ Also, we plan to decrease the amount of allowed overlap between the positive sam
 Thirdly, we also wish to modify the SVM so that it is a truly incremental, online SVM; currently, we have to retrain the SVM on \textit{all} the training data every time we wish to train it.
 Because of this, we had to significantly decrease the amount of training samples we feed the SVM to decrease the amount of time it takes to train.
 If we could implement an incremental, online SVM, then each time we train it we would only feed it the \textit{new} training samples, i.e. those from the previous frame.
-This would allow it to train on a much larger set of training samples and become much more accurate, we hope.
+This would not only allow it to train on a much larger set of training samples, but also vastly reduce the computational demands per frame which would allow our algorithm to work far faster. This was an issue for us, as we were unable to test our algorithm against some of the larger videos due to time constraints. If properly implemented, we could test our approach against larger video sequences and see how well our algorithm handles changes in the target over time.
 Other than these updates, we have some other future work planned as well.
 For instance, we may turn our main program file into a function to make it easier to call, may add an option to track multiple objects, and may investigate tracking objects in spectra other than the visible light spectrum, such as in thermal videos.
 
@@ -477,7 +490,7 @@ For instance, we may turn our main program file into a function to make it easie
 This section outlines how the work was distributed between the two authors of this report. 
 
 \subsection{Aaron Gonzales}
-\textit{Aaron Gonzales} was primarily responsible for generating the candidate sample patches, for using an SVM to find the target-specific features from the sample features, and training the online SVM.
+\textit{Aaron Gonzales} was primarily responsible for generating the candidate sample patches, for using an SVM to find the target-specific features from the sample features, training the online SVM, and generating the demo videos from the final results.
 He also researched the related work and was the primary contributor towards creating the final project presentation.
 
 \subsection{Steven Hoffman}
