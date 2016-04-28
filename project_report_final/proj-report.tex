@@ -10,6 +10,7 @@
 \usepackage[table,xcdraw]{xcolor}
 \usepackage{amsmath}
 \usepackage{flexisym}
+\usepackage{flafter}
 
 \newcommand{\todo}{{\\ \huge \color{red} Still need to do this!!!}} % Inserts Todos Statement
 
@@ -188,7 +189,7 @@ w_k\phi_k(x_i),& \text{if } w_k > 0\\
 0, 			   & \text{otherwise}
 \end{cases}
 \]  \newline
-where $\phi_k(x_i)$ denotes a the k-th entry of our positive samples $\phi(x_i)$, and $w_k$ denotes the k-th entry of our weight vector. In this way, we are able to stress those pixels which offer the best discriminatory information of our target and disregard the rest. 
+where $\phi_k(x_i)$ denotes  the k-th entry of our positive samples $\phi(x_i)$, and $w_k$ denotes the k-th entry of our SVM weight vector. In this way, we are able to stress those pixels which offer the best discriminatory information of our target and disregard the rest. 
 
 \subsection{Computing Target-Specific Saliency Maps}
 Once the target-specific features are found for the positive samples, a class-specific saliency map needs to be generated for each of these samples, using the process detailed in~\cite{simonyan2013deep}.
@@ -310,7 +311,7 @@ This is discussed further when discussing the results below.
 In our implementation we update the online SVM every third frame past the initial frames. Our intuition behind this lay in the fact that the representation our target changing dramatically in two frames is highly unlikely give the FPS rate of most modern recording devices. This also helps reduce the computational overhead associated with training new samples at every frame, improving the overall speed of our program. As an additional step in helping reduce the computational demands, we have a strict limit in the number of samples in our training set. While time did not permit for much parameter tuning, a base of 300 samples. Each frame used for training is limited to 25 overall samples (1 positive, 24 negative), the labels of which are calculated as follows\newline
 
 \begin{equation}
-	y_i =
+	y_i' =
 	\begin{cases}
 		+1, & \text{if } x_i^\textprime = x^*t\\
 		-1, & \text{if } \frac{\text{BB}(x_t^*)\cap \text{BB}(x_i\textprime)}{\text{BB}(x^*_t)\cup \text{BB}(x_t\textprime)} < \delta\\
@@ -337,17 +338,6 @@ As the SVM had not been fully integrated into our algorithm at this point these 
 The reason we decided to test the affect of the prior is because we noticed that for some video sequences, the target object would move a relatively large distance in between frames, i.e. the object was moving fast, and our tracking algorithm was not following the object when this happened.
 For example, a few frames from the \textit{Deer} video sequence where this fast object movement occurs are shown in Figure~\ref{fig:deer-p-ns}.
 
-\begin{figure}[h]
-\begin{tabular}{c}
-\subfloat[frame = 2]{\includegraphics[width = 2.5in]{Deer-P-NS-0002}} \\
-\subfloat[frame = 3]{\includegraphics[width = 2.5in]{Deer-P-NS-0003}} \\
-\subfloat[frame = 4]{\includegraphics[width = 2.5in]{Deer-P-NS-0004}} \\
-\end{tabular}
-\centering
-\caption{A video tracking sequence showing fast object movement, which caused the algorithm to fail. The prior was used and an SVM was not used in this sequence.}
-\label{fig:deer-p-ns}
-\end{figure}
-
 We hypothesized that this failure was due to the use of the prior in calculating the posterior probability in Equation~\ref{eq:posterior}.
 The prior probability algorithm contains a component that functions as a location-based probability (see Equation~\ref{eq:loc-based-prob-prior}); this means that the prior probability for a sample will be higher for candidate samples that are close to the target object in the previous frame.
 Thus, when the target object moves a large distance between frames, the candidate sample that corresponds to the moved target will have a \textit{low} prior since it is far from where the target was in the previous frame.
@@ -359,7 +349,18 @@ As can be seen from these results, the tracking algorithm performed significantl
 We also performed this test on a few other sequences, including the \textit{MountainBike} sequence, and found the same pattern to be true.
 This empirically confirmed our hypothesis that the prior probability was causing errors for fast-moving objects.
 
-\begin{figure}[h]
+\begin{figure}[t]
+\begin{tabular}{c}
+\subfloat[frame = 2]{\includegraphics[width = 2.5in]{Deer-P-NS-0002}} \\
+\subfloat[frame = 3]{\includegraphics[width = 2.5in]{Deer-P-NS-0003}} \\
+\subfloat[frame = 4]{\includegraphics[width = 2.5in]{Deer-P-NS-0004}} \\
+\end{tabular}
+\centering
+\caption{A video tracking sequence showing fast object movement, which caused the algorithm to fail. The prior was used and an SVM was not used in this sequence.}
+\label{fig:deer-p-ns}
+\end{figure}
+
+\begin{figure}[t]
 \begin{tabular}{c}
 \subfloat[frame = 2]{\includegraphics[width = 2.5in]{Deer-NP-NS-0002}} \\
 \subfloat[frame = 3]{\includegraphics[width = 2.5in]{Deer-NP-NS-0003}} \\
@@ -413,6 +414,14 @@ Some examples of our algorithm failing from what we believe are scaling issues a
 The complete video sequences can be found on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results/! 
 
 \noindent{\verb!Scale-Variation-Results!.}
+
+One simple way to try and combat the scaling problem is to try and redefine the bounding box size so that it will capture the complete target object in more frames.
+For instance, if the object grows by moving closer to the camera during the sequence, you could potentially make the initial bounding box larger; this way, it will be able to contain the complete object later on in the video, allowing our algorithm to continue tracking it.
+As long as the bounding box is not made too much bigger, it should still be able to track the object in the initial frames.
+We tried doing this in the \textit{Skiing} video sequence which, as Figure~\ref{fig:scaling2} shows, has a target that gets bigger during the sequence.
+By simply increasing the initial bounding box, we were able to get exceptionally better results, as shown in Figure~\ref{fig:scaling3}.
+This example highlights the big problem that our algorithm has with automatically handling object scaling.
+
 Unfortunately, the scaling issue is a problem inherent in the algorithm design by Hong, et al.
 This is because the algorithm assumes that the target object's bounding box stays constant for all the frames.
 While the algorithm could be modified to check for growing or shrinking bounding boxes, time constraints prevented us from adding this to our code.
@@ -441,13 +450,47 @@ As it turns out, many of the tracking errors we have had so far can be attribute
 \label{fig:scaling2}
 \end{figure}
 
+\begin{figure}[h]
+\begin{tabular}{c}
+\subfloat[frame = 1]{\includegraphics[width = 2.5in]{Skiing-CustomBB-0001}} \\
+\subfloat[frame = 31]{\includegraphics[width = 2.5in]{Skiing-CustomBB-0031}} \\
+\subfloat[frame = 32]{\includegraphics[width = 2.5in]{Skiing-CustomBB-0032}} \\
+\end{tabular}
+\centering
+\caption{A video tracking sequence where the initial bounding box was increased in size to account for the object growing throughout the sequence. Notice that by frame 32, the majority of the object remains in the bounding box, allowing for much more accurate tracking than in Figure~\ref{fig:scaling2}.}
+\label{fig:scaling3}
+\end{figure}
+
 \subsection{Miscellaneous Results}
 Other than those tests already mentioned, we tested our algorithm on several other videos from the testing dataset. 
-Some of these results are shown in the figures below and can also be seen on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results!.
+Some of these results are shown in the figures below and even more can  be seen on our GitHub page at \verb!https://github.com/msu-ml/16spr_cao_gonzales_hoffman/tree/master/results!.
 
 \noindent{Note} that several figures appear \textit{after} the references section of the report.
 Overall, we feel that our algorithm was able to perform well on video sequences that did not involve too much scale variation.
 We believe that many of the primary problems the algorithm currently faces can be fixed through the future work we plan to implement.
+
+
+\begin{figure}[h]
+\begin{tabular}{c}
+\subfloat[frame = 1]{\includegraphics[width = 2.5in]{Basketball-0001}} \\
+\subfloat[frame = 107]{\includegraphics[width = 2.5in]{Basketball-0107}} \\
+\subfloat[frame = 624]{\includegraphics[width = 2.5in]{Basketball-0624}} \\
+\end{tabular}
+\centering
+\caption{The Basketball video tracking sequence.}
+\label{fig:basketball}
+\end{figure}
+
+\begin{figure}[h]
+\begin{tabular}{c}
+\subfloat[frame = 1]{\includegraphics[width = 3.5in]{Matrix-0001}} \\
+\subfloat[frame = 23]{\includegraphics[width = 3.5in]{Matrix-0023}} \\
+\subfloat[frame = 54]{\includegraphics[width = 3.5in]{Matrix-0054}} \\
+\end{tabular}
+\centering
+\caption{The Matrix video tracking sequence.}
+\label{fig:matrix}
+\end{figure}
 
 \section{Conclusions and Future Work}
 We were able to re-implement the results of Hong, et al.~\cite{hong2015online} in order to produce an object tracking algorithm for videos that worked surprisingly well overall.
